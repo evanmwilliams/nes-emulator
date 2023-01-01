@@ -291,6 +291,31 @@ impl CPU {
         self.add_to_register_a(((data as i8).wrapping_neg().wrapping_sub(1)) as u8);
     }
 
+    fn lsr_accumulator(&mut self) {
+        let mut data = self.register_a;
+        if data & 1 == 1 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+        data = data >> 1;
+        self.set_register_a(data)
+    }
+
+    fn lsr(&mut self, mode: &AddressingMode) -> u8 {
+        let addr = self.get_operand_address(mode);
+        let mut data = self.mem_read(addr);
+        if data & 1 == 1 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+        data = data >> 1;
+        self.mem_write(addr, data);
+        self.update_zero_and_negative_flags(data);
+        data
+    }
+
     pub fn run(&mut self) {
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
 
@@ -334,6 +359,13 @@ impl CPU {
                 // AND
                 0x29 | 0x25 | 0x35 | 0x2d | 0x3d | 0x39 | 0x21 | 0x31 => self.and(&opcode.mode),
 
+                // EOR
+                0x49 | 0x45 | 0x55 | 0x4d | 0x5d | 0x59 | 0x41 | 0x51 => self.eor(&opcode.mode),
+
+                // ORA
+                0x09 | 0x05 | 0x15 | 0x0d | 0x1d | 0x19 | 0x01 | 0x11 => self.ora(&opcode.mode),
+
+                // ASL accumulator
                 0x0a => self.asl_accumulator(),
 
                 // ASL
@@ -341,11 +373,13 @@ impl CPU {
                     self.asl(&opcode.mode);
                 }
 
-                // EOR
-                0x49 | 0x45 | 0x55 | 0x4d | 0x5d | 0x59 | 0x41 | 0x51 => self.eor(&opcode.mode),
+                // LSR accumulator
+                0x4a => self.lsr_accumulator(),
 
-                // ORA
-                0x09 | 0x05 | 0x15 | 0x0d | 0x1d | 0x19 | 0x01 | 0x11 => self.ora(&opcode.mode),
+                // LSR
+                0x46 | 0x56 | 0x4e | 0x5e => {
+                    self.lsr(&opcode.mode);
+                }
 
                 _ => todo!(),
             }
@@ -421,15 +455,6 @@ mod test {
     }
 
     #[test]
-    fn test_asl_accumulator() {
-        let mut cpu = CPU::new();
-
-        cpu.load_and_run(vec![0xa9, 0x05, 0x0a, 0x00]);
-
-        assert_eq!(cpu.register_a, 0x0a);
-    }
-
-    #[test]
     fn test_eor_immediate_from_registers() {
         let mut cpu = CPU::new();
 
@@ -461,6 +486,24 @@ mod test {
         let mut cpu = CPU::new();
 
         cpu.load_and_run(vec![0xa9, 0x05, 0xe9, 0x02, 0x00]);
+
+        assert_eq!(cpu.register_a, 0x02);
+    }
+
+    #[test]
+    fn test_asl_accumulator() {
+        let mut cpu = CPU::new();
+
+        cpu.load_and_run(vec![0xa9, 0x05, 0x0a, 0x00]);
+
+        assert_eq!(cpu.register_a, 0x0a);
+    }
+
+    #[test]
+    fn test_lsr_accumulator() {
+        let mut cpu = CPU::new();
+
+        cpu.load_and_run(vec![0xa9, 0x05, 0x4a, 0x00]);
 
         assert_eq!(cpu.register_a, 0x02);
     }
