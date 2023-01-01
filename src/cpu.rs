@@ -351,6 +351,50 @@ impl CPU {
         self.set_register_a(data);
     }
 
+    fn ror(&mut self, mode: &AddressingMode) -> u8 {
+        let addr = self.get_operand_address(mode);
+        let mut data = self.mem_read(addr);
+        let old_carry = self.status.contains(CpuFlags::CARRY);
+
+        if data & 1 == 1 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+        data = data >> 1;
+        if old_carry {
+            data = data | 0b10000000;
+        }
+        self.mem_write(addr, data);
+        self.update_zero_and_negative_flags(data);
+        data
+    }
+
+    fn ror_accumulator(&mut self) {
+        let mut data = self.register_a;
+        let old_carry = self.status.contains(CpuFlags::CARRY);
+
+        if data & 1 == 1 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+        data = data >> 1;
+        if old_carry {
+            data = data | 0b10000000;
+        }
+        self.set_register_a(data);
+    }
+
+    fn inc(&mut self, mode: &AddressingMode) -> u8 {
+        let addr = self.get_operand_address(mode);
+        let mut data = self.mem_read(addr);
+        data = data.wrapping_add(1);
+        self.mem_write(addr, data);
+        self.update_zero_and_negative_flags(data);
+        data
+    }
+
     pub fn run(&mut self) {
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
 
@@ -419,8 +463,22 @@ impl CPU {
                 // ROL accumulator
                 0x2a => self.rol_accumulator(),
 
+                // ROL
                 0x26 | 0x36 | 0x2e | 0x3e => {
                     self.rol(&opcode.mode);
+                }
+
+                // ROR accumulator
+                0x6a => self.ror_accumulator(),
+
+                // ROR
+                0x66 | 0x76 | 0x6e | 0x7e => {
+                    self.ror(&opcode.mode);
+                }
+
+                // INC
+                0xe6 | 0xf6 | 0xee | 0xfe => {
+                    self.inc(&opcode.mode);
                 }
 
                 _ => todo!(),
@@ -557,5 +615,25 @@ mod test {
         cpu.load_and_run(vec![0xa9, 0x05, 0x2a, 0x00]);
 
         assert_eq!(cpu.register_a, 0x0a);
+    }
+
+    #[test]
+    fn test_ror_accumulator() {
+        let mut cpu = CPU::new();
+
+        cpu.load_and_run(vec![0xa9, 0x05, 0x6a, 0x00]);
+
+        assert_eq!(cpu.register_a, 0x02);
+    }
+
+    #[test]
+    fn test_inc_basic() {
+        let mut cpu = CPU::new();
+
+        cpu.load_and_run(vec![
+            0xa9, 0xc0, 0x8d, 0x00, 0x10, 0xee, 0x00, 0x10, 0xad, 0x00, 0x10, 00,
+        ]);
+
+        assert_eq!(cpu.register_a, 0xc1);
     }
 }
