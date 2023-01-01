@@ -144,6 +144,26 @@ impl CPU {
         }
     }
 
+    pub fn load_and_run(&mut self, program: Vec<u8>) {
+        self.load(program);
+        self.reset();
+        self.run()
+    }
+
+    pub fn load(&mut self, program: Vec<u8>) {
+        self.memory[0x8000..(0x8000 + program.len())].copy_from_slice(&program[..]);
+        self.mem_write_u16(0xFFFC, 0x8000);
+    }
+
+    pub fn reset(&mut self) {
+        self.register_a = 0;
+        self.register_x = 0;
+        self.register_y = 0;
+        self.status = CpuFlags::from_bits_truncate(0b100100);
+
+        self.program_counter = self.mem_read_u16(0xFFFC);
+    }
+
     fn lda(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
         let value = self.mem_read(addr);
@@ -181,24 +201,9 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_x);
     }
 
-    pub fn load_and_run(&mut self, program: Vec<u8>) {
-        self.load(program);
-        self.reset();
-        self.run()
-    }
-
-    pub fn load(&mut self, program: Vec<u8>) {
-        self.memory[0x8000..(0x8000 + program.len())].copy_from_slice(&program[..]);
-        self.mem_write_u16(0xFFFC, 0x8000);
-    }
-
-    pub fn reset(&mut self) {
-        self.register_a = 0;
-        self.register_x = 0;
-        self.register_y = 0;
-        self.status = CpuFlags::from_bits_truncate(0b100100);
-
-        self.program_counter = self.mem_read_u16(0xFFFC);
+    fn iny(&mut self) {
+        self.register_y = self.register_y.wrapping_add(1);
+        self.update_zero_and_negative_flags(self.register_y);
     }
 
     fn set_register_a(&mut self, value: u8) {
@@ -395,6 +400,15 @@ impl CPU {
         data
     }
 
+    fn dec(&mut self, mode: &AddressingMode) -> u8 {
+        let addr = self.get_operand_address(mode);
+        let mut data = self.mem_read(addr);
+        data = data.wrapping_sub(1);
+        self.mem_write(addr, data);
+        self.update_zero_and_negative_flags(data);
+        data
+    }
+
     pub fn run(&mut self) {
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
 
@@ -479,6 +493,14 @@ impl CPU {
                 // INC
                 0xe6 | 0xf6 | 0xee | 0xfe => {
                     self.inc(&opcode.mode);
+                }
+
+                // INY
+                0xc8 => self.iny(),
+
+                // DEC
+                0xc6 | 0xd6 | 0xce | 0xde => {
+                    self.dec(&opcode.mode);
                 }
 
                 _ => todo!(),
@@ -635,5 +657,24 @@ mod test {
         ]);
 
         assert_eq!(cpu.register_a, 0xc1);
+    }
+
+    #[test]
+    fn test_iny_overflow() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xff, 0xaa, 0xc8, 0xe8, 0x00]);
+
+        assert_eq!(cpu.register_y, 1)
+    }
+
+    #[test]
+    fn test_dec_basic() {
+        let mut cpu = CPU::new();
+
+        cpu.load_and_run(vec![
+            0xa9, 0xc1, 0x8d, 0x00, 0x10, 0xce, 0x00, 0x10, 0xad, 0x00, 0x10, 00,
+        ]);
+
+        assert_eq!(cpu.register_a, 0xc0);
     }
 }
