@@ -44,6 +44,31 @@ lazy_static! {
         OpCode::new(0x81, "STA", 2, 6, AddressingMode::IndirectX),
         OpCode::new(0x91, "STA", 2, 6, AddressingMode::IndirectY),
 
+        /* Arithmetic */
+        OpCode::new(0x69, "ADC", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0x65, "ADC", 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0x75, "ADC", 2, 4, AddressingMode::ZeroPageX),
+        OpCode::new(0x6d, "ADC", 3, 4, AddressingMode::Absolute),
+        OpCode::new(0x7d, "ADC", 3, 4, AddressingMode::AbsoluteX),
+        OpCode::new(0x79, "ADC", 3, 4, AddressingMode::AbsoluteY),
+        OpCode::new(0x61, "ADC", 2, 6, AddressingMode::IndirectX),
+        OpCode::new(0x71, "ADC", 2, 5, AddressingMode::IndirectY),
+
+        OpCode::new(0x29, "AND", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0x25, "AND", 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0x35, "AND", 2, 4, AddressingMode::ZeroPageX),
+        OpCode::new(0x2d, "AND", 3, 4, AddressingMode::Absolute),
+        OpCode::new(0x3d, "AND", 3, 4, AddressingMode::AbsoluteX),
+        OpCode::new(0x39, "AND", 3, 4, AddressingMode::AbsoluteY),
+        OpCode::new(0x21, "AND", 2, 6, AddressingMode::IndirectX),
+        OpCode::new(0x31, "AND", 2, 5, AddressingMode::IndirectY),
+
+        /* Shifts */
+        OpCode::new(0x0a, "ASL", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x06, "ASL", 2, 5, AddressingMode::ZeroPage),
+        OpCode::new(0x16, "ASL", 2, 6, AddressingMode::ZeroPageX),
+        OpCode::new(0x0e, "ASL", 3, 6, AddressingMode::Absolute),
+        OpCode::new(0x1e, "ASL", 3, 7, AddressingMode::AbsoluteX),
     ];
 
 
