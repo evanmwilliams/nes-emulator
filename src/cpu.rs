@@ -206,6 +206,36 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
     }
 
+    /// note: ignoring decimal mode
+    /// http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
+    fn add_to_register_a(&mut self, data: u8) {
+        let sum = self.register_a as u16
+            + data as u16
+            + (if self.status.contains(CpuFlags::CARRY) {
+                1
+            } else {
+                0
+            }) as u16;
+
+        let carry = sum > 0xff;
+
+        if carry {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        let result = sum as u8;
+
+        if (data ^ result) & (result ^ self.register_a) & 0x80 != 0 {
+            self.status.insert(CpuFlags::OVERFLOW);
+        } else {
+            self.status.remove(CpuFlags::OVERFLOW)
+        }
+
+        self.set_register_a(result);
+    }
+
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let data = self.mem_read(addr);
@@ -249,6 +279,18 @@ impl CPU {
         self.set_register_a(data | self.register_a);
     }
 
+    fn adc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        self.add_to_register_a(value);
+    }
+
+    fn sbc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let data = self.mem_read(addr);
+        self.add_to_register_a(((data as i8).wrapping_neg().wrapping_sub(1)) as u8);
+    }
+
     pub fn run(&mut self) {
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
 
@@ -281,7 +323,12 @@ impl CPU {
 
                 // ADC
                 0x69 | 0x65 | 0x75 | 0x6d | 0x7d | 0x79 | 0x61 | 0x71 => {
-                    todo!()
+                    self.adc(&opcode.mode);
+                }
+
+                // SBC
+                0xe9 | 0xe5 | 0xf5 | 0xed | 0xfd | 0xf9 | 0xe1 | 0xf1 => {
+                    self.sbc(&opcode.mode);
                 }
 
                 // AND
@@ -398,5 +445,23 @@ mod test {
         cpu.load_and_run(vec![0xa9, 0x05, 0x09, 0x11, 0x00]);
 
         assert_eq!(cpu.register_a, 0x15);
+    }
+
+    #[test]
+    fn test_adc_basic() {
+        let mut cpu = CPU::new();
+
+        cpu.load_and_run(vec![0x69, 0x05, 0x00]);
+
+        assert_eq!(cpu.register_a, 0x05);
+    }
+
+    #[test]
+    fn test_sbc_basic() {
+        let mut cpu = CPU::new();
+
+        cpu.load_and_run(vec![0xa9, 0x05, 0xe9, 0x02, 0x00]);
+
+        assert_eq!(cpu.register_a, 0x02);
     }
 }
