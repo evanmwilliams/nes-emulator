@@ -237,6 +237,18 @@ impl CPU {
         data
     }
 
+    fn eor(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let data = self.mem_read(addr);
+        self.set_register_a(data ^ self.register_a);
+    }
+
+    fn ora(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let data = self.mem_read(addr);
+        self.set_register_a(data | self.register_a);
+    }
+
     pub fn run(&mut self) {
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
 
@@ -281,6 +293,12 @@ impl CPU {
                 0x06 | 0x16 | 0x0e | 0x1e => {
                     self.asl(&opcode.mode);
                 }
+
+                // EOR
+                0x49 | 0x45 | 0x55 | 0x4d | 0x5d | 0x59 | 0x41 | 0x51 => self.eor(&opcode.mode),
+
+                // ORA
+                0x09 | 0x05 | 0x15 | 0x0d | 0x1d | 0x19 | 0x01 | 0x11 => self.ora(&opcode.mode),
 
                 _ => todo!(),
             }
@@ -362,5 +380,23 @@ mod test {
         cpu.load_and_run(vec![0xa9, 0x05, 0x0a, 0x00]);
 
         assert_eq!(cpu.register_a, 0x0a);
+    }
+
+    #[test]
+    fn test_eor_immediate_from_registers() {
+        let mut cpu = CPU::new();
+
+        cpu.load_and_run(vec![0xa9, 0x05, 0x49, 0x11, 0x00]);
+
+        assert_eq!(cpu.register_a, 0x14);
+    }
+
+    #[test]
+    fn test_ora_immediate_from_registers() {
+        let mut cpu = CPU::new();
+
+        cpu.load_and_run(vec![0xa9, 0x05, 0x09, 0x11, 0x00]);
+
+        assert_eq!(cpu.register_a, 0x15);
     }
 }
