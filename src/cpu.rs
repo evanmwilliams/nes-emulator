@@ -11,17 +11,16 @@ pub struct CPU {
 }
 
 #[derive(Debug)]
-#[allow(non_camel_case_types)]
 pub enum AddressingMode {
     Immediate,
     ZeroPage,
-    ZeroPage_X,
-    ZeroPage_Y,
+    ZeroPageX,
+    ZeroPageY,
     Absolute,
-    Absolute_X,
-    Absolute_Y,
-    Indirect_X,
-    Indirect_Y,
+    AbsoluteX,
+    AbsoluteY,
+    IndirectX,
+    IndirectY,
     NoneAddressing,
 }
 
@@ -74,29 +73,29 @@ impl CPU {
 
             AddressingMode::Absolute => self.mem_read_u16(self.program_counter),
 
-            AddressingMode::ZeroPage_X => {
+            AddressingMode::ZeroPageX => {
                 let pos = self.mem_read(self.program_counter);
                 let addr = pos.wrapping_add(self.register_x) as u16;
                 addr
             }
-            AddressingMode::ZeroPage_Y => {
+            AddressingMode::ZeroPageY => {
                 let pos = self.mem_read(self.program_counter);
                 let addr = pos.wrapping_add(self.register_y) as u16;
                 addr
             }
 
-            AddressingMode::Absolute_X => {
+            AddressingMode::AbsoluteX => {
                 let base = self.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_x as u16);
                 addr
             }
-            AddressingMode::Absolute_Y => {
+            AddressingMode::AbsoluteY => {
                 let base = self.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_y as u16);
                 addr
             }
 
-            AddressingMode::Indirect_X => {
+            AddressingMode::IndirectX => {
                 let base = self.mem_read(self.program_counter);
 
                 let ptr: u8 = (base as u8).wrapping_add(self.register_x);
@@ -104,7 +103,7 @@ impl CPU {
                 let hi = self.mem_read(ptr.wrapping_add(1) as u16);
                 (hi as u16) << 8 | (lo as u16)
             }
-            AddressingMode::Indirect_Y => {
+            AddressingMode::IndirectY => {
                 let base = self.mem_read(self.program_counter);
 
                 let lo = self.mem_read(base as u16);
@@ -217,7 +216,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_0xa9_lda_immidiate_load_data() {
+    fn test_0xa9_lda_immediate_load_data() {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
         assert_eq!(cpu.register_a, 5);
