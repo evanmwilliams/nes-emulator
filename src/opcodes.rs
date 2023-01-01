@@ -191,7 +191,25 @@ lazy_static! {
 
         /* Flags Clear */
         OpCode::new(0xaa, "TAX", 1, 2, AddressingMode::NoneAddressing),
-        OpCode::new(0xD8, "CLD", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0xa8, "TAY", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0xba, "TSX", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x8a, "TXA", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x9a, "TXS", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x98, "TYA", 1, 2, AddressingMode::NoneAddressing),
+
+        OpCode::new(0xd8, "CLD", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x58, "CLI", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0xb8, "CLV", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x18, "CLC", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x38, "SEC", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x78, "SEI", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0xf8, "SED", 1, 2, AddressingMode::NoneAddressing),
+
+        /* Stack */
+        OpCode::new(0x48, "PHA", 1, 3, AddressingMode::NoneAddressing),
+        OpCode::new(0x68, "PLA", 1, 4, AddressingMode::NoneAddressing),
+        OpCode::new(0x08, "PHP", 1, 3, AddressingMode::NoneAddressing),
+        OpCode::new(0x28, "PLP", 1, 4, AddressingMode::NoneAddressing),
     ];
 
 

@@ -729,9 +729,84 @@ impl CPU {
                     self.mem_write(addr, self.register_y);
                 }
 
+                // CLD
+                0xd8 => self.status.remove(CpuFlags::DECIMAL_MODE),
+
+                // CLI
+                0x58 => self.status.remove(CpuFlags::INTERRUPT_DISABLE),
+
+                // CLV
+                0xb8 => self.status.remove(CpuFlags::OVERFLOW),
+
+                // CLC
+                0x18 => self.status.remove(CpuFlags::CARRY),
+
+                // SEC
+                0x38 => self.status.insert(CpuFlags::CARRY),
+
+                // SEI
+                0x78 => self.status.insert(CpuFlags::INTERRUPT_DISABLE),
+
+                // SED
+                0xf8 => self.status.insert(CpuFlags::DECIMAL_MODE),
+
+                // PHA
+                0x48 => self.stack_push(self.register_a),
+
+                // PLA
+                0x68 => {
+                    let data = self.stack_pop();
+                    self.set_register_a(data);
+                }
+
+                // PHP
+                0x08 => {
+                    //http://wiki.nesdev.com/w/index.php/CPU_status_flag_behavior
+                    let mut flags = self.status.clone();
+                    flags.insert(CpuFlags::BREAK);
+                    flags.insert(CpuFlags::BREAK2);
+                    self.stack_push(flags.bits());
+                }
+
+                // PLP
+                0x28 => {
+                    self.status.bits = self.stack_pop();
+                    self.status.remove(CpuFlags::BREAK);
+                    self.status.insert(CpuFlags::BREAK2);
+                }
+
                 // NOP
                 0xea => {
                     //do nothing
+                }
+
+                // TAY
+                0xa8 => {
+                    self.register_y = self.register_a;
+                    self.update_zero_and_negative_flags(self.register_y);
+                }
+
+                // TSX
+                0xba => {
+                    self.register_x = self.stack_pointer;
+                    self.update_zero_and_negative_flags(self.register_x);
+                }
+
+                // TXA
+                0x8a => {
+                    self.register_a = self.register_x;
+                    self.update_zero_and_negative_flags(self.register_a);
+                }
+
+                // TXS
+                0x9a => {
+                    self.stack_pointer = self.register_x;
+                }
+
+                // TYA
+                0x98 => {
+                    self.register_a = self.register_y;
+                    self.update_zero_and_negative_flags(self.register_a);
                 }
 
                 _ => todo!(),
@@ -1026,6 +1101,4 @@ mod test {
         assert!(cpu.status.bits() & 0b0000_0010 == 0);
         assert!(cpu.status.bits() & 0b1000_0000 == 0);
     }
-
-
 }
