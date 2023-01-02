@@ -8,7 +8,6 @@ use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::EventPump;
-use std::time::Duration;
 
 #[macro_use]
 extern crate lazy_static;
@@ -83,9 +82,8 @@ fn handle_user_input(cpu: &mut CPU, event_pump: &mut EventPump) {
         }
     }
 }
-
 fn main() {
-    // init sdl2
+    // initialize sdl2
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
@@ -127,7 +125,7 @@ fn main() {
         0x60, 0xa6, 0xff, 0xea, 0xea, 0xca, 0xd0, 0xfb, 0x60,
     ];
 
-    //load the game
+    // load the game
     let mut cpu = CPU::new();
     cpu.load(game_code);
     cpu.reset();
@@ -135,17 +133,13 @@ fn main() {
     let mut screen_state = [0 as u8; 32 * 3 * 32];
     let mut rng = rand::thread_rng();
 
-    // run the game cycle
     cpu.run_with_callback(move |cpu| {
         handle_user_input(cpu, &mut event_pump);
-
         cpu.mem_write(0xfe, rng.gen_range(1, 16));
 
         if read_screen_state(cpu, &mut screen_state) {
             texture.update(None, &screen_state, 32 * 3).unwrap();
-
             canvas.copy(&texture, None, None).unwrap();
-
             canvas.present();
         }
 
