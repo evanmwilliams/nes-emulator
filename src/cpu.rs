@@ -146,6 +146,22 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
     }
 
+    fn ldx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+
+        self.register_x = value;
+        self.update_zero_and_negative_flags(self.register_x);
+    }
+
+    fn ldy(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+
+        self.register_y = value;
+        self.update_zero_and_negative_flags(self.register_y);
+    }
+
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         self.mem_write(addr, self.register_a);
@@ -279,6 +295,16 @@ impl CPU {
                     self.lda(&opcode.mode);
                 }
 
+                // LDX
+                0xa2 | 0xa6 | 0xb6 | 0xae | 0xbe => {
+                    self.ldx(&opcode.mode);
+                }
+
+                // LDY 
+                0xa0 | 0xa4 | 0xb4 | 0xac | 0xbc => {
+                    self.ldy(&opcode.mode);
+                }
+
                 // STA
                 0x85 | 0x95 | 0x8d | 0x9d | 0x99 | 0x81 | 0x91 => {
                     self.sta(&opcode.mode);
@@ -357,7 +383,7 @@ mod test {
 
     // STORES AND LOADS
     #[test]
-    fn test_0xa9_lda_immidiate_load_data() {
+    fn test_0xa9_lda_immediate_load_data() {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
         assert_eq!(cpu.register_a, 5);
@@ -380,6 +406,15 @@ mod test {
         cpu.load_and_run(vec![0xa5, 0x10, 0x00]);
 
         assert_eq!(cpu.register_a, 0x55);
+    }
+
+    #[test]
+    fn test_ldx_immediate_load_data() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa2, 0x05, 0x00]);
+        assert_eq!(cpu.register_x, 5);
+        assert!(cpu.status.bits() & 0b0000_0010 == 0);
+        assert!(cpu.status.bits() & 0b1000_0000 == 0);
     }
 
     #[test]
@@ -426,19 +461,17 @@ mod test {
     #[test]
     fn test_dey_basic() {
         let mut cpu = CPU::new();
-        cpu.register_y = 0x10;
-        cpu.load_and_run(vec![0x88, 0x00]);
+        cpu.load_and_run(vec![0xa0, 0x80, 0x88, 0x00]);
 
-        assert_eq!(cpu.register_y, 0x09)
+        assert_eq!(cpu.register_y, 0x7f)
     }
 
     #[test]
     fn test_dex_basic() {
         let mut cpu = CPU::new();
-        cpu.register_x = 0xff;
-        cpu.load_and_run(vec![0xca, 0x00]);
+        cpu.load_and_run(vec![0xa2, 0x80, 0xca, 0x00]);
 
-        assert_eq!(cpu.register_x, 0xfe)
+        assert_eq!(cpu.register_x, 0x7f);
     }
 
     #[test]
