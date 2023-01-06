@@ -26,7 +26,7 @@ lazy_static! {
         OpCode::new(0x00, "BRK", 1, 7, AddressingMode::NoneAddressing),
         OpCode::new(0xea, "NOP", 1, 2, AddressingMode::NoneAddressing),
 
-        /* Arithmetic */
+        // Arithmetic
         OpCode::new(0x69, "ADC", 2, 2, AddressingMode::Immediate),
         OpCode::new(0x65, "ADC", 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0x75, "ADC", 2, 4, AddressingMode::ZeroPageX),

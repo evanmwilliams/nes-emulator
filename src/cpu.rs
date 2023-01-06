@@ -175,6 +175,27 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_x);
     }
 
+    fn and(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        self.register_a = self.register_a & value;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
+    fn eor(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        self.register_a = self.register_a ^ value;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
+    fn ora(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        self.register_a = self.register_a | value;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
     pub fn load_and_run(&mut self, program: Vec<u8>) {
         self.load(program);
         self.reset();
@@ -209,6 +230,22 @@ impl CPU {
                 .expect(&format!("OpCode {:x} is not recognized", code));
 
             match code {
+                // ARITHMETIC
+                // AND
+                0x29 | 0x25 | 0x35 | 0x2d | 0x3d | 0x39 | 0x21 | 0x31 => {
+                    self.and(&opcode.mode);
+                }
+
+                //EOR
+                0x49 | 0x45 | 0x55 | 0x4d | 0x5d | 0x59 | 0x41 | 0x51 => {
+                    self.eor(&opcode.mode);
+                }
+
+                // ORA
+                0x09 | 0x05 | 0x15 | 0x0d | 0x1d | 0x19 | 0x01 | 0x11 => {
+                    self.ora(&opcode.mode);
+                }
+
                 // STORES AND LOADS
                 // LDA
                 0xa9 | 0xa5 | 0xb5 | 0xad | 0xbd | 0xb9 | 0xa1 | 0xb1 => {
@@ -243,6 +280,33 @@ impl CPU {
 #[cfg(test)]
 mod test {
     use super::*;
+    // ARITHMETIC
+    #[test]
+    fn test_and_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xc3, 0x29, 0xd2, 0x00]);
+        assert_eq!(cpu.register_a, 0xc2);
+        assert!(cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_eor_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xc3, 0x49, 0xd2, 0x00]);
+        assert_eq!(cpu.register_a, 0x11);
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_ora_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xc3, 0x09, 0xd2, 0x00]);
+        assert_eq!(cpu.register_a, 0xd3);
+        assert!(cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
 
     // STORES AND LOADS
     #[test]
@@ -311,9 +375,7 @@ mod test {
     #[test]
     fn test_interleaved_nops() {
         let mut cpu = CPU::new();
-        cpu.load_and_run(
-            vec![0xa9, 0x05, 0xea, 0xea, 0xa9, 0x07, 0xea, 0xea, 0x00]
-        );
+        cpu.load_and_run(vec![0xa9, 0x05, 0xea, 0xea, 0xa9, 0x07, 0xea, 0xea, 0x00]);
         assert_eq!(cpu.register_a, 7);
         assert!(cpu.status.bits() & 0b0000_0010 == 0);
         assert!(cpu.status.bits() & 0b1000_0000 == 0);
