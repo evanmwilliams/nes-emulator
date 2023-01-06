@@ -218,6 +218,33 @@ impl CPU {
         self.mem_write(addr, data.wrapping_sub(1));
     }
 
+    fn asl_accumulator(&mut self) {
+        if self.register_a & 0b1000_0000 == 0b1000_0000 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        self.register_a = self.register_a << 1;
+
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
+    fn asl(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let mut data = self.mem_read(addr);
+
+        if data & 0b1000_0000 == 0b1000_0000 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        data = data << 1;
+        self.mem_write(addr, data);
+        self.update_zero_and_negative_flags(data);
+    }
+
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
@@ -300,7 +327,7 @@ impl CPU {
                     self.ldx(&opcode.mode);
                 }
 
-                // LDY 
+                // LDY
                 0xa0 | 0xa4 | 0xb4 | 0xac | 0xbc => {
                     self.ldy(&opcode.mode);
                 }
@@ -335,6 +362,13 @@ impl CPU {
                 // DEC
                 0xc6 | 0xd6 | 0xcd | 0xde => {
                     self.dec(&opcode.mode);
+                }
+
+                // ASL Accumulator
+                0x0a => self.asl_accumulator(),
+
+                0x06 | 0x16 | 0x0e | 0x1e => {
+                    self.asl(&opcode.mode);
                 }
 
                 0xea => {}
@@ -479,6 +513,46 @@ mod test {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa9, 0xde, 0x85, 0x10, 0xc6, 0x10, 0x00]);
         assert_eq!(cpu.memory[0x10], 0xdd);
+    }
+
+    #[test]
+    fn test_asl_accumulator_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x08, 0x0a, 0x00]);
+        assert_eq!(cpu.register_a, 0x10);
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_asl_accumulator_basic_carry() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xa8, 0x0a, 0x00]);
+        assert_eq!(cpu.register_a, 0x50);
+        assert!(cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_asl_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x08, 0x85, 0x10, 0x06, 0x10, 0x00]);
+        assert_eq!(cpu.memory[0x10], 0x10);
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_asl_basic_carry() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xa8, 0x85, 0x10, 0x06, 0x10, 0x00]);
+        assert_eq!(cpu.memory[0x10], 0x50);
+        assert!(cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
     }
 
     // AUXILLARY
