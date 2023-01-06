@@ -209,17 +209,26 @@ impl CPU {
                 .expect(&format!("OpCode {:x} is not recognized", code));
 
             match code {
+                // STORES AND LOADS
+                // LDA
                 0xa9 | 0xa5 | 0xb5 | 0xad | 0xbd | 0xb9 | 0xa1 | 0xb1 => {
                     self.lda(&opcode.mode);
                 }
-
-                /* STA */
+                // STA
                 0x85 | 0x95 | 0x8d | 0x9d | 0x99 | 0x81 | 0x91 => {
                     self.sta(&opcode.mode);
                 }
 
-                0xAA => self.tax(),
+                // FLAGS CLEAR
+                // TAX
+                0xaa => self.tax(),
+
+                // SHIFTS
+                // INX
                 0xe8 => self.inx(),
+
+                0xea => {}
+                // BRK
                 0x00 => return,
                 _ => todo!(),
             }
@@ -235,6 +244,7 @@ impl CPU {
 mod test {
     use super::*;
 
+    // STORES AND LOADS
     #[test]
     fn test_0xa9_lda_immidiate_load_data() {
         let mut cpu = CPU::new();
@@ -252,13 +262,25 @@ mod test {
     }
 
     #[test]
+    fn test_lda_from_memory() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x10, 0x55);
+
+        cpu.load_and_run(vec![0xa5, 0x10, 0x00]);
+
+        assert_eq!(cpu.register_a, 0x55);
+    }
+
+    // SHIFTS
+    #[test]
     fn test_0xaa_tax_move_a_to_x() {
         let mut cpu = CPU::new();
-        cpu.load_and_run(vec![0xa9, 0x0A, 0xaa, 0x00]);
+        cpu.load_and_run(vec![0xa9, 0x0a, 0xaa, 0x00]);
 
         assert_eq!(cpu.register_x, 10)
     }
 
+    // INTEGRATION TEST 1
     #[test]
     fn test_5_ops_working_together() {
         let mut cpu = CPU::new();
@@ -267,6 +289,7 @@ mod test {
         assert_eq!(cpu.register_x, 0xc1)
     }
 
+    // SHIFTS
     #[test]
     fn test_inx_overflow() {
         let mut cpu = CPU::new();
@@ -275,13 +298,24 @@ mod test {
         assert_eq!(cpu.register_x, 1)
     }
 
+    // AUXILLARY
     #[test]
-    fn test_lda_from_memory() {
+    fn test_single_nop() {
         let mut cpu = CPU::new();
-        cpu.mem_write(0x10, 0x55);
+        cpu.load_and_run(vec![0xa9, 0x05, 0xea, 0x00]);
+        assert_eq!(cpu.register_a, 5);
+        assert!(cpu.status.bits() & 0b0000_0010 == 0);
+        assert!(cpu.status.bits() & 0b1000_0000 == 0);
+    }
 
-        cpu.load_and_run(vec![0xa5, 0x10, 0x00]);
-
-        assert_eq!(cpu.register_a, 0x55);
+    #[test]
+    fn test_interleaved_nops() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(
+            vec![0xa9, 0x05, 0xea, 0xea, 0xa9, 0x07, 0xea, 0xea, 0x00]
+        );
+        assert_eq!(cpu.register_a, 7);
+        assert!(cpu.status.bits() & 0b0000_0010 == 0);
+        assert!(cpu.status.bits() & 0b1000_0000 == 0);
     }
 }
