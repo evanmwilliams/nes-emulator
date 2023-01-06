@@ -175,6 +175,33 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_x);
     }
 
+    fn iny(&mut self) {
+        self.register_y = self.register_y.wrapping_add(1);
+        self.update_zero_and_negative_flags(self.register_y);
+    }
+
+    fn inc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let data = self.mem_read(addr);
+        self.mem_write(addr, data.wrapping_add(1));
+    }
+
+    fn dex(&mut self) {
+        self.register_x = self.register_x.wrapping_sub(1);
+        self.update_zero_and_negative_flags(self.register_x);
+    }
+
+    fn dey(&mut self) {
+        self.register_y = self.register_y.wrapping_sub(1);
+        self.update_zero_and_negative_flags(self.register_y);
+    }
+
+    fn dec(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let data = self.mem_read(addr);
+        self.mem_write(addr, data.wrapping_sub(1));
+    }
+
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
@@ -251,6 +278,7 @@ impl CPU {
                 0xa9 | 0xa5 | 0xb5 | 0xad | 0xbd | 0xb9 | 0xa1 | 0xb1 => {
                     self.lda(&opcode.mode);
                 }
+
                 // STA
                 0x85 | 0x95 | 0x8d | 0x9d | 0x99 | 0x81 | 0x91 => {
                     self.sta(&opcode.mode);
@@ -263,6 +291,25 @@ impl CPU {
                 // SHIFTS
                 // INX
                 0xe8 => self.inx(),
+
+                // INY
+                0xc8 => self.iny(),
+
+                // INC
+                0xe6 | 0xf6 | 0xee | 0xfe => {
+                    self.inc(&opcode.mode);
+                }
+
+                // DEX
+                0xca => self.dex(),
+
+                // DEY
+                0x88 => self.dey(),
+
+                // DEC
+                0xc6 | 0xd6 | 0xcd | 0xde => {
+                    self.dec(&opcode.mode);
+                }
 
                 0xea => {}
                 // BRK
@@ -335,7 +382,6 @@ mod test {
         assert_eq!(cpu.register_a, 0x55);
     }
 
-    // SHIFTS
     #[test]
     fn test_0xaa_tax_move_a_to_x() {
         let mut cpu = CPU::new();
@@ -355,11 +401,51 @@ mod test {
 
     // SHIFTS
     #[test]
+    fn test_iny_overflow() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xff, 0xaa, 0xc8, 0xe8, 0x00]);
+
+        assert_eq!(cpu.register_y, 1)
+    }
+
+    #[test]
     fn test_inx_overflow() {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa9, 0xff, 0xaa, 0xe8, 0xe8, 0x00]);
 
         assert_eq!(cpu.register_x, 1)
+    }
+
+    #[test]
+    fn test_inc_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xde, 0x85, 0x10, 0xe6, 0x10, 0x00]);
+        assert_eq!(cpu.memory[0x10], 0xdf);
+    }
+
+    #[test]
+    fn test_dey_basic() {
+        let mut cpu = CPU::new();
+        cpu.register_y = 0x10;
+        cpu.load_and_run(vec![0x88, 0x00]);
+
+        assert_eq!(cpu.register_y, 0x09)
+    }
+
+    #[test]
+    fn test_dex_basic() {
+        let mut cpu = CPU::new();
+        cpu.register_x = 0xff;
+        cpu.load_and_run(vec![0xca, 0x00]);
+
+        assert_eq!(cpu.register_x, 0xfe)
+    }
+
+    #[test]
+    fn test_dec_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xde, 0x85, 0x10, 0xc6, 0x10, 0x00]);
+        assert_eq!(cpu.memory[0x10], 0xdd);
     }
 
     // AUXILLARY
