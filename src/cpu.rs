@@ -272,6 +272,84 @@ impl CPU {
         self.update_zero_and_negative_flags(data);
     }
 
+    fn rol_accumulator(&mut self) {
+        let mut data = self.register_a;
+        let old_carry = self.status.contains(CpuFlags::CARRY);
+
+        if data >> 7 == 1 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        data = data << 1;
+        if old_carry {
+            data = data | 1;
+        }
+
+        self.register_a = data;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
+    fn rol(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let mut data = self.mem_read(addr);
+        let old_carry = self.status.contains(CpuFlags::CARRY);
+
+        if data >> 7 == 1 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        data = data << 1;
+        if old_carry {
+            data = data | 1;
+        }
+
+        self.mem_write(addr, data);
+        self.update_zero_and_negative_flags(data);
+    }
+
+    fn ror_accumulator(&mut self) {
+        let mut data = self.register_a;
+        let old_carry = self.status.contains(CpuFlags::CARRY);
+
+        if data & 1 == 1 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        data = data >> 1;
+        if old_carry {
+            data = data | 0b1000_0000;
+        }
+
+        self.register_a = data;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
+    fn ror(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let mut data = self.mem_read(addr);
+        let old_carry = self.status.contains(CpuFlags::CARRY);
+
+        if data & 1 == 1 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        data = data >> 1;
+        if old_carry {
+            data = data | 0b1000_0000;
+        }
+
+        self.mem_write(addr, data);
+        self.update_zero_and_negative_flags(data);
+    }
+
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
@@ -405,6 +483,22 @@ impl CPU {
                 // LSR
                 0x46 | 0x56 | 0x4e | 0x5e => {
                     self.lsr(&opcode.mode);
+                }
+
+                // ROL Accumulator
+                0x2a => self.rol_accumulator(),
+
+                // ROL
+                0x26 | 0x36 | 0x2e | 0x3e => {
+                    self.rol(&opcode.mode);
+                }
+
+                // ROR Accumulator
+                0x6a => self.ror_accumulator(),
+
+                //ROR
+                0x66 | 0x76 | 0x6e | 0x7e => {
+                    self.ror(&opcode.mode);
                 }
 
                 0xea => {}
@@ -625,6 +719,86 @@ mod test {
     fn test_lsr_basic_carry() {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa9, 0x50, 0x85, 0x10, 0x46, 0x10, 0x00]);
+        assert_eq!(cpu.memory[0x10], 0x28);
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_rol_accumulator_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x08, 0x2a, 0x00]);
+        assert_eq!(cpu.register_a, 0x10);
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_rol_accumulator_basic_carry() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xa8, 0x2a, 0x00]);
+        assert_eq!(cpu.register_a, 0x50);
+        assert!(cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_rol_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x08, 0x85, 0x10, 0x26, 0x10, 0x00]);
+        assert_eq!(cpu.memory[0x10], 0x10);
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_rol_basic_carry() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xa8, 0x85, 0x10, 0x26, 0x10, 0x00]);
+        assert_eq!(cpu.memory[0x10], 0x50);
+        assert!(cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_ror_accumulator_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x10, 0x6a, 0x00]);
+        assert_eq!(cpu.register_a, 0x08);
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_ror_accumulator_basic_2() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x50, 0x6a, 0x00]);
+        assert_eq!(cpu.register_a, 0x28);
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_ror_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x10, 0x85, 0x10, 0x66, 0x10, 0x00]);
+        assert_eq!(cpu.memory[0x10], 0x08);
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_ror_basic_2() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x50, 0x85, 0x10, 0x66, 0x10, 0x00]);
         assert_eq!(cpu.memory[0x10], 0x28);
         assert!(!cpu.status.contains(CpuFlags::CARRY));
         assert!(!cpu.status.contains(CpuFlags::NEGATIV));
