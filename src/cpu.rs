@@ -848,7 +848,9 @@ mod test {
     #[test]
     fn test_tya_basic() {
         let mut cpu = CPU::new();
-        cpu.load_and_run(vec![])
+        cpu.load_and_run(vec![0xa0, 0x80, 0x98, 0x00]);
+
+        assert_eq!(cpu.register_a, 0x80);
     }
 
     // SHIFTS
