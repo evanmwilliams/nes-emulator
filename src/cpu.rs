@@ -206,6 +206,11 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_x);
     }
 
+    fn tay(&mut self) {
+        self.register_y = self.register_a;
+        self.update_zero_and_negative_flags(self.register_y);
+    }
+
     fn update_zero_and_negative_flags(&mut self, result: u8) {
         if result == 0 {
             self.status.insert(CpuFlags::ZERO);
@@ -525,10 +530,6 @@ impl CPU {
                     self.sty(&opcode.mode);
                 }
 
-                // FLAGS CLEAR
-                // TAX
-                0xaa => self.tax(),
-
                 // SHIFTS
                 // INX
                 0xe8 => self.inx(),
@@ -687,6 +688,57 @@ impl CPU {
                     self.bit(&opcode.mode);
                 }
 
+                // FLAGS CLEAR
+                // CLD
+                0xd8 => self.status.remove(CpuFlags::DECIMAL_MODE),
+
+                // CLI
+                0x58 => self.status.remove(CpuFlags::INTERRUPT_DISABLE),
+
+                // CLV
+                0xb8 => self.status.remove(CpuFlags::OVERFLOW),
+
+                // CLC
+                0x18 => self.status.remove(CpuFlags::CARRY),
+
+                // SEC
+                0x38 => self.status.insert(CpuFlags::CARRY),
+
+                // SEI
+                0x78 => self.status.insert(CpuFlags::INTERRUPT_DISABLE),
+
+                // SED
+                0xf8 => self.status.insert(CpuFlags::DECIMAL_MODE),
+
+                // TAX
+                0xaa => self.tax(),
+
+                // TAY
+                0xa8 => self.tay(),
+
+                // TSX
+                0xba => {
+                    self.register_x = self.stack_pointer;
+                    self.update_zero_and_negative_flags(self.register_x);
+                }
+
+                // TXA
+                0x8a => {
+                    self.register_a = self.register_x;
+                    self.update_zero_and_negative_flags(self.register_a);
+                }
+
+                // TXS
+                0x9a => {
+                    self.stack_pointer = self.register_x;
+                }
+
+                // TYA
+                0x98 => {
+                    self.register_a = self.register_y;
+                    self.update_zero_and_negative_flags(self.register_a);
+                }
+
                 // NOP
                 0xea => {}
 
@@ -770,11 +822,33 @@ mod test {
     }
 
     #[test]
-    fn test_0xaa_tax_move_a_to_x() {
+    fn test_tax_basic() {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa9, 0x0a, 0xaa, 0x00]);
 
-        assert_eq!(cpu.register_x, 10)
+        assert_eq!(cpu.register_x, 0x0a);
+    }
+
+    #[test]
+    fn test_tay_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x0a, 0xa8, 0x00]);
+
+        assert_eq!(cpu.register_y, 0x0a);
+    }
+
+    #[test]
+    fn test_txa_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa2, 0x80, 0x8a, 0x00]);
+
+        assert_eq!(cpu.register_a, 0x80);
+    }
+
+    #[test]
+    fn test_tya_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![])
     }
 
     // SHIFTS
@@ -1064,6 +1138,28 @@ mod test {
         ]);
         assert_eq!(cpu.register_a, 0x03);
         assert_eq!(cpu.program_counter, 0x609);
+    }
+
+    // FLAGS CLEAR
+    #[test]
+    fn test_clear_basic() {
+        let mut cpu = CPU::new();
+        cpu.status = CpuFlags::from_bits_truncate(0b111111);
+        cpu.load_and_run(vec![0x18, 0xd8, 0x58, 0xb8, 0x00]);
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::DECIMAL_MODE));
+        assert!(!cpu.status.contains(CpuFlags::INTERRUPT_DISABLE));
+        assert!(!cpu.status.contains(CpuFlags::OVERFLOW));
+    }
+
+    #[test]
+    fn test_set_basic() {
+        let mut cpu = CPU::new();
+        cpu.status = CpuFlags::from_bits_truncate(0b000000);
+        cpu.load_and_run(vec![0x38, 0xf8, 0x78, 0x00]);
+        assert!(cpu.status.contains(CpuFlags::CARRY));
+        assert!(cpu.status.contains(CpuFlags::DECIMAL_MODE));
+        assert!(cpu.status.contains(CpuFlags::INTERRUPT_DISABLE));
     }
 
     // INTEGRATION TEST 1
