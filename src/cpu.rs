@@ -167,6 +167,16 @@ impl CPU {
         self.mem_write(addr, self.register_a);
     }
 
+    fn stx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        self.mem_write(addr, self.register_x);
+    }
+
+    fn sty(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        self.mem_write(addr, self.register_y);
+    }
+
     fn tax(&mut self) {
         self.register_x = self.register_a;
         self.update_zero_and_negative_flags(self.register_x);
@@ -350,6 +360,19 @@ impl CPU {
         self.update_zero_and_negative_flags(data);
     }
 
+    fn cmp(&mut self, mode: &AddressingMode, cmp_reg: u8) {
+        let addr = self.get_operand_address(mode);
+        let data = self.mem_read(addr);
+
+        if data <= cmp_reg {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        self.update_zero_and_negative_flags(cmp_reg.wrapping_sub(data));
+    }
+
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
@@ -442,6 +465,16 @@ impl CPU {
                     self.sta(&opcode.mode);
                 }
 
+                // STX
+                0x86 | 0x96 | 0x8e => {
+                    self.stx(&opcode.mode);
+                }
+
+                // STY
+                0x84 | 0x94 | 0x8c => {
+                    self.sty(&opcode.mode);
+                }
+
                 // FLAGS CLEAR
                 // TAX
                 0xaa => self.tax(),
@@ -465,7 +498,7 @@ impl CPU {
                 0x88 => self.dey(),
 
                 // DEC
-                0xc6 | 0xd6 | 0xcd | 0xde => {
+                0xc6 | 0xd6 | 0xce | 0xde => {
                     self.dec(&opcode.mode);
                 }
 
@@ -496,9 +529,24 @@ impl CPU {
                 // ROR Accumulator
                 0x6a => self.ror_accumulator(),
 
-                //ROR
+                // ROR
                 0x66 | 0x76 | 0x6e | 0x7e => {
                     self.ror(&opcode.mode);
+                }
+
+                // CMP
+                0xc9 | 0xc5 | 0xd5 | 0xcd | 0xdd | 0xd9 | 0xc1 | 0xd1 => {
+                    self.cmp(&opcode.mode, self.register_a);
+                }
+
+                // CPX
+                0xe0 | 0xe4 | 0xec => {
+                    self.cmp(&opcode.mode, self.register_x);
+                }
+
+                // CPY
+                0xc0 | 0xc4 | 0xcc => {
+                    self.cmp(&opcode.mode, self.register_y);
                 }
 
                 0xea => {}
@@ -587,15 +635,6 @@ mod test {
         cpu.load_and_run(vec![0xa9, 0x0a, 0xaa, 0x00]);
 
         assert_eq!(cpu.register_x, 10)
-    }
-
-    // INTEGRATION TEST 1
-    #[test]
-    fn test_5_ops_working_together() {
-        let mut cpu = CPU::new();
-        cpu.load_and_run(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00]);
-
-        assert_eq!(cpu.register_x, 0xc1)
     }
 
     // SHIFTS
@@ -805,6 +844,36 @@ mod test {
         assert!(!cpu.status.contains(CpuFlags::ZERO));
     }
 
+    #[test]
+    fn test_cmp_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x10, 0x85, 0x10, 0xc5, 0x10, 0x00]);
+        assert_eq!(cpu.register_a, 0x10);
+        assert!(cpu.status.contains(CpuFlags::CARRY));
+        assert!(cpu.status.contains(CpuFlags::ZERO));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+    }
+
+    #[test]
+    fn test_cpx_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa2, 0x10, 0x86, 0x10, 0xe0, 0x10, 0x00]);
+        assert_eq!(cpu.register_x, 0x10);
+        assert!(cpu.status.contains(CpuFlags::CARRY));
+        assert!(cpu.status.contains(CpuFlags::ZERO));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+    }
+
+    #[test]
+    fn test_cpy_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa0, 0x10, 0x84, 0x10, 0xc0, 0x10, 0x00]);
+        assert_eq!(cpu.register_y, 0x10);
+        assert!(cpu.status.contains(CpuFlags::CARRY));
+        assert!(cpu.status.contains(CpuFlags::ZERO));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+    }
+
     // AUXILLARY
     #[test]
     fn test_single_nop() {
@@ -822,5 +891,14 @@ mod test {
         assert_eq!(cpu.register_a, 7);
         assert!(cpu.status.bits() & 0b0000_0010 == 0);
         assert!(cpu.status.bits() & 0b1000_0000 == 0);
+    }
+
+    // INTEGRATION TEST 1
+    #[test]
+    fn test_5_ops_working_together() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00]);
+
+        assert_eq!(cpu.register_x, 0xc1)
     }
 }
