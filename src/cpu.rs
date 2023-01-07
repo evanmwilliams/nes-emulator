@@ -245,6 +245,33 @@ impl CPU {
         self.update_zero_and_negative_flags(data);
     }
 
+    fn lsr_accumulator(&mut self) {
+        if self.register_a & 0b0000_0001 == 0b0000_0001 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        self.register_a = self.register_a >> 1;
+
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
+    fn lsr(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let mut data = self.mem_read(addr);
+
+        if data & 0b0000_0001 == 0b0000_0001 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        data = data >> 1;
+        self.mem_write(addr, data);
+        self.update_zero_and_negative_flags(data);
+    }
+
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
@@ -367,8 +394,17 @@ impl CPU {
                 // ASL Accumulator
                 0x0a => self.asl_accumulator(),
 
+                // ASL
                 0x06 | 0x16 | 0x0e | 0x1e => {
                     self.asl(&opcode.mode);
+                }
+
+                // LSR Accumulator
+                0x4a => self.lsr_accumulator(),
+
+                // LSR
+                0x46 | 0x56 | 0x4e | 0x5e => {
+                    self.lsr(&opcode.mode);
                 }
 
                 0xea => {}
@@ -551,6 +587,46 @@ mod test {
         cpu.load_and_run(vec![0xa9, 0xa8, 0x85, 0x10, 0x06, 0x10, 0x00]);
         assert_eq!(cpu.memory[0x10], 0x50);
         assert!(cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_lsr_accumulator_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x10, 0x4a, 0x00]);
+        assert_eq!(cpu.register_a, 0x08);
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_lsr_accumulator_basic_carry() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x50, 0x4a, 0x00]);
+        assert_eq!(cpu.register_a, 0x28);
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_lsr_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x10, 0x85, 0x10, 0x46, 0x10, 0x00]);
+        assert_eq!(cpu.memory[0x10], 0x08);
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIV));
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+    }
+
+    #[test]
+    fn test_lsr_basic_carry() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x50, 0x85, 0x10, 0x46, 0x10, 0x00]);
+        assert_eq!(cpu.memory[0x10], 0x28);
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
         assert!(!cpu.status.contains(CpuFlags::NEGATIV));
         assert!(!cpu.status.contains(CpuFlags::ZERO));
     }
