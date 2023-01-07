@@ -42,7 +42,7 @@ pub enum AddressingMode {
     NoneAddressing,
 }
 
-trait Mem {
+pub trait Mem {
     fn mem_read(&self, addr: u16) -> u8;
 
     fn mem_write(&mut self, addr: u16, data: u8);
@@ -520,6 +520,15 @@ impl CPU {
     }
 
     pub fn run(&mut self) {
+        self.run_with_callback(|_| {});
+    }
+
+    pub fn run_with_callback<F>(&mut self, mut callback: F)
+    where
+        F: FnMut(&mut CPU),
+    {
+        callback(self);
+
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
 
         loop {
@@ -1289,7 +1298,7 @@ mod test {
         assert_eq!(cpu.register_a, 0x80)
     }
 
-    // INTEGRATION TEST 
+    // INTEGRATION TEST
     #[test]
     fn test_5_ops_working_together() {
         let mut cpu = CPU::new();
