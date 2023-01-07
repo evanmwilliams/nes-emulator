@@ -449,6 +449,13 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
     }
 
+    fn php(&mut self) {
+        let mut flags = self.status.clone();
+        flags.insert(CpuFlags::BREAK);
+        flags.insert(CpuFlags::BREAK2);
+        self.stack_push(flags.bits());
+    }
+
     pub fn load_and_run(&mut self, program: Vec<u8>) {
         self.load(program);
         self.reset();
@@ -737,6 +744,27 @@ impl CPU {
                 0x98 => {
                     self.register_a = self.register_y;
                     self.update_zero_and_negative_flags(self.register_a);
+                }
+
+                // STACK
+                // PHA
+                0x48 => self.stack_push(self.register_a),
+
+                // PLA
+                0x68 => {
+                    let data = self.stack_pop();
+                    self.register_a = data;
+                    self.update_zero_and_negative_flags(data);
+                }
+
+                // PHP
+                0x08 => self.php(),
+
+                // PLP
+                0x28 => {
+                    self.status.bits = self.stack_pop();
+                    self.status.remove(CpuFlags::BREAK);
+                    self.status.remove(CpuFlags::BREAK2);
                 }
 
                 // NOP
@@ -1162,6 +1190,21 @@ mod test {
         assert!(cpu.status.contains(CpuFlags::CARRY));
         assert!(cpu.status.contains(CpuFlags::DECIMAL_MODE));
         assert!(cpu.status.contains(CpuFlags::INTERRUPT_DISABLE));
+    }
+
+    // STACK
+    #[test]
+    fn test_pha_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x80, 0x48, 0x00]);
+        assert_eq!(cpu.stack_pop(), 0x80);
+    }
+
+    #[test]
+    fn test_pla_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x80, 0x48, 0xa9, 0x00, 0x68, 0x00]);
+        assert_eq!(cpu.register_a, 0x80)
     }
 
     // INTEGRATION TEST 1
