@@ -138,6 +138,30 @@ impl CPU {
         }
     }
 
+    fn stack_pop(&mut self) -> u8 {
+        self.stack_pointer = self.stack_pointer.wrapping_add(1);
+        self.mem_read((STACK as u16) + self.stack_pointer as u16)
+    }
+
+    fn stack_push(&mut self, data: u8) {
+        self.mem_write((STACK as u16) + self.stack_pointer as u16, data);
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1)
+    }
+
+    fn stack_push_u16(&mut self, data: u16) {
+        let hi = (data >> 8) as u8;
+        let lo = (data & 0xff) as u8;
+        self.stack_push(hi);
+        self.stack_push(lo);
+    }
+
+    fn stack_pop_u16(&mut self) -> u16 {
+        let lo = self.stack_pop() as u16;
+        let hi = self.stack_pop() as u16;
+
+        hi << 8 | lo
+    }
+
     fn lda(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
         let value = self.mem_read(addr);
@@ -373,6 +397,32 @@ impl CPU {
         self.update_zero_and_negative_flags(cmp_reg.wrapping_sub(data));
     }
 
+    fn branch(&mut self, cond: bool) {
+        if cond {
+            let jump: i8 = self.mem_read(self.program_counter) as i8;
+            let jump_addr = self
+                .program_counter
+                .wrapping_add(1)
+                .wrapping_add(jump as u16);
+
+            self.program_counter = jump_addr;
+        }
+    }
+
+    fn bit(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let data = self.mem_read(addr);
+        let and = self.register_a & data;
+        if and == 0 {
+            self.status.insert(CpuFlags::ZERO);
+        } else {
+            self.status.remove(CpuFlags::ZERO);
+        }
+
+        self.status.set(CpuFlags::NEGATIV, data & 0b10000000 > 0);
+        self.status.set(CpuFlags::OVERFLOW, data & 0b01000000 > 0);
+    }
+
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
@@ -549,7 +599,97 @@ impl CPU {
                     self.cmp(&opcode.mode, self.register_y);
                 }
 
+                // BRANCHING
+                // JMP Immediate
+                0x4c => {
+                    let mem_addr = self.mem_read_u16(self.program_counter);
+                    self.program_counter = mem_addr;
+                }
+
+                // JMP Indirect
+                0x6c => {
+                    let mem_address = self.mem_read_u16(self.program_counter);
+
+                    let indirect_ref = if mem_address & 0x00FF == 0x00FF {
+                        let lo = self.mem_read(mem_address);
+                        let hi = self.mem_read(mem_address & 0xFF00);
+                        (hi as u16) << 8 | (lo as u16)
+                    } else {
+                        self.mem_read_u16(mem_address)
+                    };
+
+                    self.program_counter = indirect_ref;
+                }
+
+                // JSR
+                0x20 => {
+                    self.stack_push_u16(self.program_counter + 2 - 1);
+                    let target_address = self.mem_read_u16(self.program_counter);
+                    self.program_counter = target_address;
+                }
+
+                // RTS
+                0x60 => {
+                    self.program_counter = self.stack_pop_u16() + 1;
+                }
+
+                // RTI
+                0x40 => {
+                    self.status.bits = self.stack_pop();
+                    self.status.remove(CpuFlags::BREAK);
+                    self.status.insert(CpuFlags::BREAK2);
+
+                    self.program_counter = self.stack_pop_u16();
+                }
+
+                // BNE
+                0xd0 => {
+                    self.branch(!self.status.contains(CpuFlags::ZERO));
+                }
+
+                // BVS
+                0x70 => {
+                    self.branch(self.status.contains(CpuFlags::OVERFLOW));
+                }
+
+                // BVC
+                0x50 => {
+                    self.branch(!self.status.contains(CpuFlags::OVERFLOW));
+                }
+
+                // BPL
+                0x10 => {
+                    self.branch(!self.status.contains(CpuFlags::NEGATIV));
+                }
+
+                // BMI
+                0x30 => {
+                    self.branch(self.status.contains(CpuFlags::NEGATIV));
+                }
+
+                // BEQ
+                0xf0 => {
+                    self.branch(self.status.contains(CpuFlags::ZERO));
+                }
+
+                // BCS
+                0xb0 => {
+                    self.branch(self.status.contains(CpuFlags::CARRY));
+                }
+
+                // BCC
+                0x90 => {
+                    self.branch(!self.status.contains(CpuFlags::CARRY));
+                }
+
+                // BIT
+                0x24 | 0x2c => {
+                    self.bit(&opcode.mode);
+                }
+
+                // NOP
                 0xea => {}
+
                 // BRK
                 0x00 => return,
                 _ => todo!(),
@@ -891,6 +1031,39 @@ mod test {
         assert_eq!(cpu.register_a, 7);
         assert!(cpu.status.bits() & 0b0000_0010 == 0);
         assert!(cpu.status.bits() & 0b1000_0000 == 0);
+    }
+
+    #[test]
+    fn test_bit_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xc0, 0x85, 0x10, 0xa9, 0x00, 0x24, 0x10, 0x00]);
+        assert!(cpu.status.contains(CpuFlags::OVERFLOW));
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
+    }
+
+    // BRANCHING
+    #[test]
+    fn test_jmp_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x08, 0x4c, 0x15]);
+        assert_eq!(cpu.program_counter, 0x16);
+    }
+
+    #[test]
+    fn test_jmp_indirect_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x08, 0x6c, 0xff]);
+        assert_eq!(cpu.program_counter, 0x01);
+    }
+
+    #[test]
+    fn test_jmp_label() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![
+            0xa9, 0x03, 0x4c, 0x08, 0x06, 0x00, 0x00, 0x00, 0x8d, 0x00, 0x02,
+        ]);
+        assert_eq!(cpu.register_a, 0x03);
+        assert_eq!(cpu.program_counter, 0x609);
     }
 
     // INTEGRATION TEST 1
