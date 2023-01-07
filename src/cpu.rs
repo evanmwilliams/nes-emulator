@@ -428,6 +428,48 @@ impl CPU {
         self.status.set(CpuFlags::OVERFLOW, data & 0b01000000 > 0);
     }
 
+    // http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
+    fn add_to_register_a(&mut self, data: u8) {
+        let sum = self.register_a as u16
+            + data as u16
+            + (if self.status.contains(CpuFlags::CARRY) {
+                1
+            } else {
+                0
+            }) as u16;
+
+        let carry = sum > 0xff;
+
+        if carry {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        let result = sum as u8;
+
+        if (data ^ result) & (result ^ self.register_a) & 0x80 != 0 {
+            self.status.insert(CpuFlags::OVERFLOW);
+        } else {
+            self.status.remove(CpuFlags::OVERFLOW)
+        }
+
+        self.register_a = result;
+        self.update_zero_and_negative_flags(result);
+    }
+
+    fn sbc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let data = self.mem_read(addr);
+        self.add_to_register_a(((data as i8).wrapping_neg().wrapping_sub(1)) as u8);
+    }
+
+    fn adc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        self.add_to_register_a(value);
+    }
+
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
@@ -491,6 +533,16 @@ impl CPU {
 
             match code {
                 // ARITHMETIC
+                // ADC
+                0x69 | 0x65 | 0x75 | 0x6d | 0x7d | 0x79 | 0x61 | 0x71 => {
+                    self.adc(&opcode.mode);
+                }
+
+                // SBC
+                0xe9 | 0xe5 | 0xf5 | 0xed | 0xfd | 0xf9 | 0xe1 | 0xf1 => {
+                    self.sbc(&opcode.mode);
+                }
+
                 // AND
                 0x29 | 0x25 | 0x35 | 0x2d | 0x3d | 0x39 | 0x21 | 0x31 => {
                     self.and(&opcode.mode);
@@ -785,7 +837,26 @@ impl CPU {
 #[cfg(test)]
 mod test {
     use super::*;
-    // ARITHMETIC
+    // ARITHMETIC TESTS
+    #[test]
+    fn test_adc_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x69, 0xc4, 0x00]);
+
+        assert_eq!(cpu.register_a, 0x84);
+        assert_eq!(cpu.register_x, 0xc1);
+    }
+
+    #[test]
+    fn test_sbc_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xc0, 0xaa, 0xe8, 0xe9, 0xc4, 0x00]);
+
+        assert_eq!(cpu.register_a, 0xfb);
+        assert_eq!(cpu.register_x, 0xc1);
+        assert!(cpu.status.contains(CpuFlags::NEGATIV));
+    }
+
     #[test]
     fn test_and_basic() {
         let mut cpu = CPU::new();
@@ -813,9 +884,9 @@ mod test {
         assert!(!cpu.status.contains(CpuFlags::ZERO));
     }
 
-    // STORES AND LOADS
+    // STORES AND LOAD TESTS
     #[test]
-    fn test_0xa9_lda_immediate_load_data() {
+    fn test_lda_immediate_load_data() {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
         assert_eq!(cpu.register_a, 5);
@@ -824,7 +895,7 @@ mod test {
     }
 
     #[test]
-    fn test_0xa9_lda_zero_flag() {
+    fn test_lda_zero_flag() {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa9, 0x00, 0x00]);
         assert!(cpu.status.bits() & 0b0000_0010 == 0b10);
@@ -881,7 +952,7 @@ mod test {
         assert_eq!(cpu.register_a, 0x80);
     }
 
-    // SHIFTS
+    // SHIFT TESTS
     #[test]
     fn test_iny_overflow() {
         let mut cpu = CPU::new();
@@ -1118,7 +1189,7 @@ mod test {
         assert!(!cpu.status.contains(CpuFlags::NEGATIV));
     }
 
-    // AUXILLARY
+    // AUXILLARY TESTS
     #[test]
     fn test_single_nop() {
         let mut cpu = CPU::new();
@@ -1145,7 +1216,7 @@ mod test {
         assert!(!cpu.status.contains(CpuFlags::CARRY));
     }
 
-    // BRANCHING
+    // BRANCHING TESTS
     #[test]
     fn test_jmp_basic() {
         let mut cpu = CPU::new();
@@ -1170,7 +1241,18 @@ mod test {
         assert_eq!(cpu.program_counter, 0x609);
     }
 
-    // FLAGS CLEAR
+    #[test]
+    fn test_bne_basic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![
+            0xa2, 0x08, 0xca, 0x8e, 0x00, 0x02, 0xe0, 0x03, 0xd0, 0xf8, 0x8e, 0x01, 0x02, 0x00,
+        ]);
+
+        assert_eq!(cpu.register_x, 0x03);
+        assert_eq!(cpu.program_counter, 0x800e);
+    }
+
+    // FLAG CLEAR TESTS
     #[test]
     fn test_clear_basic() {
         let mut cpu = CPU::new();
@@ -1192,7 +1274,7 @@ mod test {
         assert!(cpu.status.contains(CpuFlags::INTERRUPT_DISABLE));
     }
 
-    // STACK
+    // STACK TESTS
     #[test]
     fn test_pha_basic() {
         let mut cpu = CPU::new();
@@ -1207,7 +1289,7 @@ mod test {
         assert_eq!(cpu.register_a, 0x80)
     }
 
-    // INTEGRATION TEST 1
+    // INTEGRATION TEST 
     #[test]
     fn test_5_ops_working_together() {
         let mut cpu = CPU::new();
