@@ -10,4 +10,4 @@ lazy_static = "1.4.0"
 bitflags = "1.2.1"
 
 sdl2 = "0.34.0"
-rand = "=0.7.3"
+rand = "0.7.3"

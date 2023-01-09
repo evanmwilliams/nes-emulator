@@ -14,7 +14,7 @@ bitflags! {
     }
 }
 
-const STACK: u16 = 0x100;
+const STACK: u16 = 0x0100;
 const STACK_RESET: u8 = 0xfd;
 
 pub struct CPU {
@@ -78,8 +78,8 @@ impl CPU {
             register_x: 0,
             register_y: 0,
             stack_pointer: STACK_RESET,
-            status: CpuFlags::from_bits_truncate(0b100100),
             program_counter: 0,
+            status: CpuFlags::from_bits_truncate(0b100100),
             memory: [0; 0xFFFF],
         }
     }
@@ -138,38 +138,6 @@ impl CPU {
         }
     }
 
-    fn stack_pop(&mut self) -> u8 {
-        self.stack_pointer = self.stack_pointer.wrapping_add(1);
-        self.mem_read((STACK as u16) + self.stack_pointer as u16)
-    }
-
-    fn stack_push(&mut self, data: u8) {
-        self.mem_write((STACK as u16) + self.stack_pointer as u16, data);
-        self.stack_pointer = self.stack_pointer.wrapping_sub(1)
-    }
-
-    fn stack_push_u16(&mut self, data: u16) {
-        let hi = (data >> 8) as u8;
-        let lo = (data & 0xff) as u8;
-        self.stack_push(hi);
-        self.stack_push(lo);
-    }
-
-    fn stack_pop_u16(&mut self) -> u16 {
-        let lo = self.stack_pop() as u16;
-        let hi = self.stack_pop() as u16;
-
-        hi << 8 | lo
-    }
-
-    fn lda(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(&mode);
-        let value = self.mem_read(addr);
-
-        self.register_a = value;
-        self.update_zero_and_negative_flags(self.register_a);
-    }
-
     fn ldx(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
         let value = self.mem_read(addr);
@@ -186,19 +154,40 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_y);
     }
 
+    fn lda(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+
+        self.register_a = value;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         self.mem_write(addr, self.register_a);
     }
 
-    fn stx(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
-        self.mem_write(addr, self.register_x);
+    fn set_register_a(&mut self, value: u8) {
+        self.register_a = value;
+        self.update_zero_and_negative_flags(self.register_a);
     }
 
-    fn sty(&mut self, mode: &AddressingMode) {
+    fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
-        self.mem_write(addr, self.register_y);
+        let data = self.mem_read(addr);
+        self.set_register_a(data & self.register_a);
+    }
+
+    fn eor(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let data = self.mem_read(addr);
+        self.set_register_a(data ^ self.register_a);
+    }
+
+    fn ora(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let data = self.mem_read(addr);
+        self.set_register_a(data | self.register_a);
     }
 
     fn tax(&mut self) {
@@ -218,7 +207,7 @@ impl CPU {
             self.status.remove(CpuFlags::ZERO);
         }
 
-        if result & 0b1000_0000 != 0 {
+        if result >> 7 == 1 {
             self.status.insert(CpuFlags::NEGATIV);
         } else {
             self.status.remove(CpuFlags::NEGATIV);
@@ -241,20 +230,69 @@ impl CPU {
         self.mem_write(addr, data.wrapping_add(1));
     }
 
-    fn dex(&mut self) {
-        self.register_x = self.register_x.wrapping_sub(1);
-        self.update_zero_and_negative_flags(self.register_x);
+    /// http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
+    fn add_to_register_a(&mut self, data: u8) {
+        let sum = self.register_a as u16
+            + data as u16
+            + (if self.status.contains(CpuFlags::CARRY) {
+                1
+            } else {
+                0
+            }) as u16;
+
+        let carry = sum > 0xff;
+
+        if carry {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        let result = sum as u8;
+
+        if (data ^ result) & (result ^ self.register_a) & 0x80 != 0 {
+            self.status.insert(CpuFlags::OVERFLOW);
+        } else {
+            self.status.remove(CpuFlags::OVERFLOW)
+        }
+
+        self.set_register_a(result);
     }
 
-    fn dey(&mut self) {
-        self.register_y = self.register_y.wrapping_sub(1);
-        self.update_zero_and_negative_flags(self.register_y);
-    }
-
-    fn dec(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
+    fn sbc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
         let data = self.mem_read(addr);
-        self.mem_write(addr, data.wrapping_sub(1));
+        self.add_to_register_a(((data as i8).wrapping_neg().wrapping_sub(1)) as u8);
+    }
+
+    fn adc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        self.add_to_register_a(value);
+    }
+
+    fn stack_pop(&mut self) -> u8 {
+        self.stack_pointer = self.stack_pointer.wrapping_add(1);
+        self.mem_read((STACK as u16) + self.stack_pointer as u16)
+    }
+
+    fn stack_push(&mut self, data: u8) {
+        self.mem_write((STACK as u16) + self.stack_pointer as u16, data);
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1)
+    }
+
+    fn stack_push_u16(&mut self, data: u16) {
+        let hi = (data >> 8) as u8;
+        let lo = (data & 0xff) as u8;
+        self.stack_push(hi);
+        self.stack_push(lo);
+    }
+
+    fn stack_pop_u16(&mut self) -> u16 {
+        let lo = self.stack_pop() as u16;
+        let hi = self.stack_pop() as u16;
+
+        hi << 8 | lo
     }
 
     fn asl_accumulator(&mut self) {
@@ -389,7 +427,31 @@ impl CPU {
         self.update_zero_and_negative_flags(data);
     }
 
-    fn cmp(&mut self, mode: &AddressingMode, cmp_reg: u8) {
+    fn dex(&mut self) {
+        self.register_x = self.register_x.wrapping_sub(1);
+        self.update_zero_and_negative_flags(self.register_x);
+    }
+
+    fn dey(&mut self) {
+        self.register_y = self.register_y.wrapping_sub(1);
+        self.update_zero_and_negative_flags(self.register_y);
+    }
+
+    fn dec(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let data = self.mem_read(addr);
+        self.mem_write(addr, data.wrapping_sub(1));
+    }
+
+    fn php(&mut self) {
+        //http://wiki.nesdev.com/w/index.php/CPU_status_flag_behavior
+        let mut flags = self.status.clone();
+        flags.insert(CpuFlags::BREAK);
+        flags.insert(CpuFlags::BREAK2);
+        self.stack_push(flags.bits());
+    }
+
+    fn compare(&mut self, mode: &AddressingMode, cmp_reg: u8) {
         let addr = self.get_operand_address(mode);
         let data = self.mem_read(addr);
 
@@ -428,85 +490,15 @@ impl CPU {
         self.status.set(CpuFlags::OVERFLOW, data & 0b01000000 > 0);
     }
 
-    // http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
-    fn add_to_register_a(&mut self, data: u8) {
-        let sum = self.register_a as u16
-            + data as u16
-            + (if self.status.contains(CpuFlags::CARRY) {
-                1
-            } else {
-                0
-            }) as u16;
-
-        let carry = sum > 0xff;
-
-        if carry {
-            self.status.insert(CpuFlags::CARRY);
-        } else {
-            self.status.remove(CpuFlags::CARRY);
-        }
-
-        let result = sum as u8;
-
-        if (data ^ result) & (result ^ self.register_a) & 0x80 != 0 {
-            self.status.insert(CpuFlags::OVERFLOW);
-        } else {
-            self.status.remove(CpuFlags::OVERFLOW)
-        }
-
-        self.register_a = result;
-        self.update_zero_and_negative_flags(result);
-    }
-
-    fn sbc(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(&mode);
-        let data = self.mem_read(addr);
-        self.add_to_register_a(((data as i8).wrapping_neg().wrapping_sub(1)) as u8);
-    }
-
-    fn adc(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
-        let value = self.mem_read(addr);
-        self.add_to_register_a(value);
-    }
-
-    fn and(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
-        let value = self.mem_read(addr);
-        self.register_a = self.register_a & value;
-        self.update_zero_and_negative_flags(self.register_a);
-    }
-
-    fn eor(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
-        let value = self.mem_read(addr);
-        self.register_a = self.register_a ^ value;
-        self.update_zero_and_negative_flags(self.register_a);
-    }
-
-    fn ora(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
-        let value = self.mem_read(addr);
-        self.register_a = self.register_a | value;
-        self.update_zero_and_negative_flags(self.register_a);
-    }
-
-    fn php(&mut self) {
-        let mut flags = self.status.clone();
-        flags.insert(CpuFlags::BREAK);
-        flags.insert(CpuFlags::BREAK2);
-        self.stack_push(flags.bits());
-    }
-
     pub fn load_and_run(&mut self, program: Vec<u8>) {
         self.load(program);
         self.reset();
-        self.run();
+        self.run()
     }
 
     pub fn load(&mut self, program: Vec<u8>) {
-        self.memory[0x8000..(0x8000 + program.len())].copy_from_slice(&program[..]);
-        self.mem_write_u16(0xFFFC, 0x8000);
+        self.memory[0x0600..(0x0600 + program.len())].copy_from_slice(&program[..]);
+        self.mem_write_u16(0xFFFC, 0x0600);
     }
 
     pub fn reset(&mut self) {
@@ -515,6 +507,7 @@ impl CPU {
         self.register_y = 0;
         self.stack_pointer = STACK_RESET;
         self.status = CpuFlags::from_bits_truncate(0b100100);
+        // self.memory = [0; 0xFFFF];
 
         self.program_counter = self.mem_read_u16(0xFFFC);
     }
@@ -590,12 +583,14 @@ impl CPU {
 
                 // STX
                 0x86 | 0x96 | 0x8e => {
-                    self.stx(&opcode.mode);
+                    let addr = self.get_operand_address(&opcode.mode);
+                    self.mem_write(addr, self.register_x);
                 }
 
                 // STY
                 0x84 | 0x94 | 0x8c => {
-                    self.sty(&opcode.mode);
+                    let addr = self.get_operand_address(&opcode.mode);
+                    self.mem_write(addr, self.register_y);
                 }
 
                 // SHIFTS
@@ -655,17 +650,17 @@ impl CPU {
 
                 // CMP
                 0xc9 | 0xc5 | 0xd5 | 0xcd | 0xdd | 0xd9 | 0xc1 | 0xd1 => {
-                    self.cmp(&opcode.mode, self.register_a);
+                    self.compare(&opcode.mode, self.register_a);
                 }
 
                 // CPX
                 0xe0 | 0xe4 | 0xec => {
-                    self.cmp(&opcode.mode, self.register_x);
+                    self.compare(&opcode.mode, self.register_x);
                 }
 
                 // CPY
                 0xc0 | 0xc4 | 0xcc => {
-                    self.cmp(&opcode.mode, self.register_y);
+                    self.compare(&opcode.mode, self.register_y);
                 }
 
                 // BRANCHING
@@ -839,6 +834,8 @@ impl CPU {
             if program_counter_state == self.program_counter {
                 self.program_counter += (opcode.len - 1) as u16;
             }
+
+            callback(self);
         }
     }
 }
@@ -1247,7 +1244,7 @@ mod test {
             0xa9, 0x03, 0x4c, 0x08, 0x06, 0x00, 0x00, 0x00, 0x8d, 0x00, 0x02,
         ]);
         assert_eq!(cpu.register_a, 0x03);
-        assert_eq!(cpu.program_counter, 0x609);
+        assert_eq!(cpu.program_counter, 0x60c);
     }
 
     #[test]
@@ -1258,7 +1255,7 @@ mod test {
         ]);
 
         assert_eq!(cpu.register_x, 0x03);
-        assert_eq!(cpu.program_counter, 0x800e);
+        assert_eq!(cpu.program_counter, 0x60e);
     }
 
     // FLAG CLEAR TESTS
