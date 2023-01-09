@@ -1,5 +1,8 @@
+// Module declarations
 pub mod cpu;
 pub mod opcodes;
+
+// Imports
 use cpu::Mem;
 use cpu::CPU;
 use rand::Rng;
