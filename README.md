@@ -9,6 +9,8 @@ Once all of your dependencies are installed, simply run `cargo run` from the ter
 
 ![Snake Game Running on Emulator](./snake_game.png)
 
+For the snake game, use A, S, D, and W to move left, right, down, and up, respectively. Keep chasing the colorful pixels to make the snake bigger!
+
 ## Testing
 To run all of the unit tests, run `cargo test` from any directory. The CPU module has extensive unit testing, so if you just want to run selected tests use `cargo test --test [test_name]`. 
 
