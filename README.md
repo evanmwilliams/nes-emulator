@@ -7,6 +7,8 @@ You'll need Rust (and Cargo) installed to run the application. Cargo will handle
 
 Once all of your dependencies are installed, simply run `cargo run` from the terminal to run the application. Right now, you'll be able to play the snake game using the MOS 6502 Architecture!
 
+![Snake Game Running on Emulator](./snake_game.png)
+
 ## Testing
 To run all of the unit tests, run `cargo test` from any directory. The CPU module has extensive unit testing, so if you just want to run selected tests use `cargo test --test [test_name]`. 
 
